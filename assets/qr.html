@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Vigil - Scan on iPhone</title>
+  <style>
+    body {
+      margin: 0;
+      background: #0A1640;
+      color: #F7F9FE;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    .card {
+      background: #FFFFFF;
+      padding: 32px;
+      border-radius: 24px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      display: inline-block;
+      margin-bottom: 24px;
+    }
+    h1 {
+      font-size: 28px;
+      margin: 0 0 8px 0;
+      color: #F7F9FE;
+      letter-spacing: -0.5px;
+    }
+    p {
+      color: #8798CC;
+      font-size: 16px;
+      margin: 0 0 24px 0;
+      max-width: 400px;
+    }
+    .url-box {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 12px;
+      padding: 12px 20px;
+      font-family: monospace;
+      font-size: 15px;
+      color: #C9A24A;
+      margin-top: 16px;
+    }
+    .instruction {
+      font-size: 14px;
+      color: #8798CC;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Scan with your iPhone</h1>
+  <p>Open the <strong>Expo Go</strong> app or the iOS <strong>Camera</strong> app to launch Vigil on your iPhone.</p>
+  
+  <div class="card">
+    <img src="https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=exp%3A%2F%2F192.168.1.10%3A8081" width="320" height="320" alt="Vigil QR Code" />
+  </div>
+
+  <div class="url-box">exp://192.168.1.10:8081</div>
+  <div class="instruction">iPhone and PC must be on the same Wi-Fi network</div>
+</body>
+</html>
+
