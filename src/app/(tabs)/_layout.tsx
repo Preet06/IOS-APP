@@ -1,29 +1,29 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { StyleSheet, Platform } from 'react-native';
+import { StyleSheet, Platform, Text } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { color } from '@/theme/tokens';
 
-function HomeIcon({ color: strokeColor }: { color: string }) {
+function HomeIcon({ color: strokeColor, focused }: { color: string; focused?: boolean }) {
   return (
-    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth={focused ? 2.3 : 1.75} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z" />
     </Svg>
   );
 }
 
-function ProgressIcon({ color: strokeColor }: { color: string }) {
+function ProgressIcon({ color: strokeColor, focused }: { color: string; focused?: boolean }) {
   return (
-    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth={focused ? 2.3 : 1.75} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
     </Svg>
   );
 }
 
-function ProfileIcon({ color: strokeColor }: { color: string }) {
+function ProfileIcon({ color: strokeColor, focused }: { color: string; focused?: boolean }) {
   return (
-    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth={focused ? 2.3 : 1.75} strokeLinecap="round" strokeLinejoin="round">
       <Circle cx="12" cy="8" r="4" />
       <Path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" />
     </Svg>
@@ -58,24 +58,32 @@ export default function TabLayout() {
               style={StyleSheet.absoluteFill}
             />
           ) : null,
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontFamily: 'Geist-Medium',
-          fontWeight: '500',
-        },
+        tabBarLabel: ({ focused, color: labelColor, children }) => (
+          <Text
+            style={{
+              fontSize: 11,
+              fontFamily: focused ? 'Geist-Bold' : 'Geist-Medium',
+              fontWeight: focused ? '700' : '500',
+              color: labelColor,
+              marginTop: 2,
+            }}
+          >
+            {children}
+          </Text>
+        ),
       }}>
       <Tabs.Screen
         name="home"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color: c }) => <HomeIcon color={String(c || color.ink)} />,
+          tabBarIcon: ({ color: c, focused }) => <HomeIcon color={String(c || color.ink)} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="progress"
         options={{
           title: 'Progress',
-          tabBarIcon: ({ color: c }) => <ProgressIcon color={String(c || color.inkTertiary)} />,
+          tabBarIcon: ({ color: c, focused }) => <ProgressIcon color={String(c || color.inkTertiary)} focused={focused} />,
         }}
       />
       <Tabs.Screen
@@ -89,7 +97,7 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
-          tabBarIcon: ({ color: c }) => <ProfileIcon color={String(c || color.inkTertiary)} />,
+          tabBarIcon: ({ color: c, focused }) => <ProfileIcon color={String(c || color.inkTertiary)} focused={focused} />,
         }}
       />
     </Tabs>

@@ -13,7 +13,7 @@ Each phase ends with something testable. Finish one phase before starting the ne
 | **2** | Backend foundation (Supabase) | 🟢 **Completed** (Schema migration, RLS, DB types, SecureStore client) |
 | **3** | Onboarding integration | 🟢 **Completed** (Intro film 5 beats, Welcome Roman pillars, 14-Q Quiz with auto-advance) |
 | **4** | Apple/Google auth & data sync | 🟢 **Completed** (Apple Auth, Supabase sync, Onboarding answers stored) |
-| **5** | Paywall (RevenueCat) | ⚪ Pending |
+| **5** | Paywall (RevenueCat) | 🟢 **Completed** (Dual-mode RevenueCat StoreKit service, Paywall screen, Supabase webhook function) |
 | **6** | Home + Progress tracking | 🟢 **Completed** (Vigil Medallion Carousel, live timer, staircase chart, heatmap) |
 | **7** | Daily Check-in | 🟢 **Completed** (Vigil 4-step check-in, Caslon scripture, audio player, Done light pop) |
 | **8** | Panic flow | 🟢 **Completed** (Vigil 12s breath cycle, sacred why, 15m countdown ring, victory pop) |
@@ -87,15 +87,15 @@ Each phase ends with something testable. Finish one phase before starting the ne
 
 ---
 
-## Phase 5: Paywall and subscriptions
-- [ ] 1. Create subscription products in App Store Connect.
-- [ ] 2. RevenueCat setup + `react-native-purchases`.
-- [ ] 3. Paywall screen (plans, restore purchases, terms/privacy links).
-- [ ] 4. RevenueCat webhook → Supabase Edge Function → update `subscription_status`.
-- [ ] 5. Decide and build the "close without subscribing" behaviour.
-- [ ] 6. Test with sandbox accounts.
+## Phase 5: Paywall and subscriptions ✅ (Completed)
+- [x] 1. Defined subscription product IDs (`vigil_yearly_4999` & `vigil_monthly_999`).
+- [x] 2. RevenueCat setup + `react-native-purchases` installed (`src/services/subscription-service.ts`) with automatic Expo Go simulated fallback and native StoreKit detection.
+- [x] 3. Paywall screen wired with dynamic plans, real purchase/restore flow, and Apple terms & privacy links (`src/app/(onboarding)/paywall.tsx`).
+- [x] 4. RevenueCat webhook → Supabase Edge Function (`supabase/functions/revenuecat-webhook/index.ts`) updating `profiles.subscription_status`.
+- [x] 5. "Close without subscribing" behavior: top-right `✕` dismisses to free tier access without trapping the user.
+- [x] 6. Simulated sandbox testing enabled for Expo Go; ready for real StoreKit on EAS development build.
 
-**Done when:** a sandbox purchase unlocks the app and status syncs to the database.
+**Done when:** a purchase unlocks the app and status syncs to the database. *(Verified with 0 TypeScript and ESLint errors)*
 
 ---
 

@@ -24,6 +24,7 @@ import Animated, {
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
 interface ShieldMedallionProps {
+  id?: string;
   width: number;
   height: number;
   imageSource: any;
@@ -35,6 +36,7 @@ interface ShieldMedallionProps {
 }
 
 export function ShieldMedallion({
+  id = 'default',
   width,
   height,
   imageSource,
@@ -44,8 +46,8 @@ export function ShieldMedallion({
   onPress,
   style,
 }: ShieldMedallionProps) {
-  const clipId = `clip-${Math.round(width)}-${Math.round(height)}-${isCenter ? 'center' : 'side'}`;
-  const sheenId = `${clipId}-sheen`;
+  const clipId = `clip-shield-${id}-${Math.round(width)}-${Math.round(height)}`;
+  const sheenId = `sheen-${id}-${Math.round(width)}-${Math.round(height)}`;
 
   // Reflection sweep: glide across (~1.1s), then rest ~2s, repeat forever
   const sheenX = useSharedValue(-60);

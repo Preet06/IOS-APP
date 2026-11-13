@@ -3,8 +3,8 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { RecoveryProvider } from '@/context/recovery-context';
+import { useFonts } from 'expo-font';
 import {
-  useFonts,
   Geist_400Regular,
   Geist_500Medium,
   Geist_600SemiBold,
@@ -21,12 +21,21 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     Geist: Geist_400Regular,
+    'Geist-Regular': Geist_400Regular,
     'Geist-Medium': Geist_500Medium,
     'Geist-SemiBold': Geist_600SemiBold,
     'Geist-Bold': Geist_700Bold,
+    Geist_400Regular,
+    Geist_500Medium,
+    Geist_600SemiBold,
+    Geist_700Bold,
     LibreCaslonText: LibreCaslonText_400Regular,
+    'LibreCaslonText-Regular': LibreCaslonText_400Regular,
     'LibreCaslonText-Italic': LibreCaslonText_400Regular_Italic,
     'LibreCaslonText-Bold': LibreCaslonText_700Bold,
+    LibreCaslonText_400Regular,
+    LibreCaslonText_400Regular_Italic,
+    LibreCaslonText_700Bold,
   });
 
   useEffect(() => {
@@ -72,6 +81,12 @@ export default function RootLayout() {
           name="rank-list"
           options={{
             presentation: 'modal',
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="lapse-notes"
+          options={{
             headerShown: false,
           }}
         />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,6 +7,10 @@ import {
   TouchableOpacity,
   TextInput,
   Dimensions,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -55,16 +59,27 @@ export default function ProgressScreen() {
     cleanHours,
     cleanMinutes,
     scriptureStreak,
-    panicCount,
-    userName,
     activeRank,
+    lapses,
+    longestHoldDays,
+    mostCommonTrigger,
     recordRelapse,
   } = useRecovery();
 
   const [isLapseSheetOpen, setIsLapseSheetOpen] = useState(false);
-  const [selectedTrigger, setSelectedTrigger] = useState('Late night');
+  const [selectedTriggers, setSelectedTriggers] = useState<Record<string, boolean>>({
+    'Late night': true,
+  });
   const [lapseNote, setLapseNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const sheetScrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
+
+  const toggleTrigger = (t: string) => {
+    setSelectedTriggers((prev) => ({
+      ...prev,
+      [t]: !prev[t],
+    }));
+  };
 
   // Pulsing Dot Animation
   const pulseOpacity = useSharedValue(0.5);
@@ -77,16 +92,18 @@ export default function ProgressScreen() {
       -1,
       true
     );
-  }, []);
+  }, [pulseOpacity]);
 
-  const animatedPulseStyle = useAnimatedStyle(() => ({
-    opacity: pulseOpacity.value,
-  }));
+  const isLapseNoteValid = lapseNote.trim().length > 0;
 
   const handleLapseConfirm = async () => {
+    if (!isLapseNoteValid) return;
     try {
       setIsSubmitting(true);
-      await recordRelapse(selectedTrigger, lapseNote);
+      const activeList = Object.keys(selectedTriggers).filter((k) => selectedTriggers[k]);
+      const triggerStr = activeList.length > 0 ? activeList.join(', ') : 'Late night';
+      await recordRelapse(triggerStr, lapseNote.trim());
+      setLapseNote('');
       setIsLapseSheetOpen(false);
     } catch (e) {
       console.warn(e);
@@ -249,23 +266,35 @@ export default function ProgressScreen() {
 
             <View style={styles.lapseMetricsRow}>
               <View style={styles.metricItem}>
-                <Text style={styles.metricBigNumber}>0</Text>
+                <Text style={styles.metricBigNumber}>{lapses.length}</Text>
                 <Text style={styles.metricLabel}>So far</Text>
               </View>
               <View style={styles.metricDivider} />
               <View style={styles.metricItem}>
                 <Text style={styles.metricBigNumber}>
-                  {cleanDays}
+                  {longestHoldDays}
                   <Text style={{ fontSize: 15, fontWeight: '500', color: color.inkSecondary }}> days</Text>
                 </Text>
                 <Text style={styles.metricLabel}>Longest hold</Text>
               </View>
               <View style={styles.metricDivider} />
               <View style={styles.metricItem}>
-                <Text style={[styles.metricBigNumber, { fontSize: 16, marginTop: 4 }]}>Late night</Text>
+                <Text style={[styles.metricBigNumber, { fontSize: 16, marginTop: 4 }]}>{mostCommonTrigger}</Text>
                 <Text style={styles.metricLabel}>Most common</Text>
               </View>
             </View>
+
+            {/* Your lapse notes button (Figma 05_progress.html) */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => router.push('/lapse-notes')}
+              style={styles.lapseNotesButton}
+            >
+              <Text style={styles.lapseNotesButtonText}>Your lapse notes</Text>
+              <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#5566A0" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M9 6l6 6-6 6" />
+              </Svg>
+            </TouchableOpacity>
           </View>
 
           {/* ══════════ ACTION: "I SLIPPED" ══════════ */}
@@ -286,80 +315,110 @@ export default function ProgressScreen() {
         </ScrollView>
 
         {/* ══════════ BOTTOM SHEET: RELAPSE LOG ══════════ */}
-        {isLapseSheetOpen && (
-          <View style={styles.sheetModalOverlay}>
+        <Modal
+          visible={isLapseSheetOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setIsLapseSheetOpen(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.sheetModalOverlay}
+          >
             <TouchableOpacity
               activeOpacity={1}
-              onPress={() => setIsLapseSheetOpen(false)}
+              onPress={() => {
+                Keyboard.dismiss();
+                setIsLapseSheetOpen(false);
+              }}
               style={styles.sheetScrim}
             />
             <View style={styles.sheetContent}>
               <View style={styles.sheetHandle} />
 
-              <Text style={styles.sheetEyebrow}>Log a relapse</Text>
-              <Text style={styles.sheetTitle}>
-                You watched porn or acted out, and you want to restart your count.
-              </Text>
-
-              {/* Status changes table */}
-              <View style={styles.sheetTable}>
-                <View style={styles.sheetTableRow}>
-                  <Text style={styles.sheetTableKey}>Clean time</Text>
-                  <Text style={styles.sheetTableVal}>{cleanDays} days → 0</Text>
-                </View>
-                <View style={styles.sheetTableRow}>
-                  <Text style={styles.sheetTableKey}>Rank</Text>
-                  <Text style={styles.sheetTableVal}>{activeRank.title} → Page</Text>
-                </View>
-                <View style={styles.sheetTableRow}>
-                  <Text style={styles.sheetTableKey}>Scripture streak</Text>
-                  <Text style={styles.sheetTableVal}>Stays at {scriptureStreak}</Text>
-                </View>
-              </View>
-
-              <Text style={styles.sheetFieldLabel}>What led to it? Optional</Text>
-              <View style={styles.triggerWrap}>
-                {['Late night', 'Stress', 'Boredom', 'Alone', 'Scrolling', 'Other'].map((t) => (
-                  <TouchableOpacity
-                    key={t}
-                    onPress={() => setSelectedTrigger(t)}
-                    style={[styles.triggerChip, selectedTrigger === t && styles.triggerChipSelected]}
-                  >
-                    <Text style={[styles.triggerText, selectedTrigger === t && styles.triggerTextSelected]}>
-                      {t}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={[styles.sheetFieldLabel, { marginTop: 14 }]}>Note to yourself Optional</Text>
-              <TextInput
-                value={lapseNote}
-                onChangeText={setLapseNote}
-                placeholder="What happened? What will you do differently next time?"
-                placeholderTextColor={color.inkTertiary}
-                multiline
-                style={styles.sheetTextArea}
-              />
-
-              <TouchableOpacity
-                activeOpacity={0.88}
-                onPress={handleLapseConfirm}
-                disabled={isSubmitting}
-                style={styles.sheetConfirmButton}
+              <ScrollView
+                ref={sheetScrollRef}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.sheetScrollInner}
               >
-                <Text style={styles.sheetConfirmText}>Restart my count</Text>
-              </TouchableOpacity>
+                <Text style={styles.sheetEyebrow}>Log a relapse</Text>
+                <Text style={styles.sheetTitle}>
+                  You watched porn or acted out, and you want to restart your count.
+                </Text>
 
-              <TouchableOpacity
-                onPress={() => setIsLapseSheetOpen(false)}
-                style={styles.sheetCancelButton}
-              >
-                <Text style={styles.sheetCancelText}>Cancel</Text>
-              </TouchableOpacity>
+                {/* Status changes table */}
+                <View style={styles.sheetTable}>
+                  <View style={styles.sheetTableRow}>
+                    <Text style={styles.sheetTableKey}>Clean time</Text>
+                    <Text style={styles.sheetTableVal}>{cleanDays} days → 0</Text>
+                  </View>
+                  <View style={styles.sheetTableRow}>
+                    <Text style={styles.sheetTableKey}>Rank</Text>
+                    <Text style={styles.sheetTableVal}>{activeRank.title} → Page</Text>
+                  </View>
+                  <View style={styles.sheetTableRow}>
+                    <Text style={styles.sheetTableKey}>Scripture streak</Text>
+                    <Text style={styles.sheetTableVal}>Stays at {scriptureStreak}</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.sheetFieldLabel}>What led to it? Optional</Text>
+                <View style={styles.triggerWrap}>
+                  {['Late night', 'Stress', 'Boredom', 'Alone', 'Scrolling', 'Other'].map((t) => {
+                    const isSelected = !!selectedTriggers[t];
+                    return (
+                      <TouchableOpacity
+                        key={t}
+                        onPress={() => toggleTrigger(t)}
+                        style={[styles.triggerChip, isSelected && styles.triggerChipSelected]}
+                      >
+                        <Text style={[styles.triggerText, isSelected && styles.triggerTextSelected]}>
+                          {t}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={[styles.sheetFieldLabel, { marginTop: 14 }]}>
+                  Note to yourself <Text style={{ color: '#B4413A' }}>Required</Text>
+                </Text>
+                <TextInput
+                  value={lapseNote}
+                  onChangeText={setLapseNote}
+                  placeholder="What happened? What will you do differently next time?"
+                  placeholderTextColor={color.inkTertiary}
+                  multiline
+                  returnKeyType="done"
+                  blurOnSubmit
+                  onFocus={() => {
+                    setTimeout(() => {
+                      sheetScrollRef.current?.scrollToEnd({ animated: true });
+                    }, 200);
+                  }}
+                  style={styles.sheetTextArea}
+                />
+
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  onPress={handleLapseConfirm}
+                  disabled={isSubmitting || !isLapseNoteValid}
+                  style={[styles.sheetConfirmButton, !isLapseNoteValid && { opacity: 0.45 }]}
+                >
+                  <Text style={styles.sheetConfirmText}>Restart my count</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setIsLapseSheetOpen(false)}
+                  style={styles.sheetCancelButton}
+                >
+                  <Text style={styles.sheetCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </ScrollView>
             </View>
-          </View>
-        )}
+          </KeyboardAvoidingView>
+        </Modal>
       </SafeAreaView>
     </VigilBackground>
   );
@@ -510,6 +569,23 @@ const styles = StyleSheet.create({
     color: color.inkTertiary,
     marginTop: 2,
   },
+  lapseNotesButton: {
+    marginTop: 16,
+    height: 48,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: color.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  lapseNotesButtonText: {
+    fontSize: 15,
+    fontFamily: 'Geist-SemiBold',
+    fontWeight: '600',
+    color: color.ink,
+  },
   slippedContainer: {
     marginTop: 10,
     alignItems: 'center',
@@ -539,8 +615,7 @@ const styles = StyleSheet.create({
     color: color.inkTertiary,
   },
   sheetModalOverlay: {
-    ...StyleSheet.absoluteFill,
-    zIndex: 50,
+    flex: 1,
     justifyContent: 'flex-end',
   },
   sheetScrim: {
@@ -553,7 +628,10 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     paddingHorizontal: 24,
     paddingTop: 12,
-    paddingBottom: 40,
+    maxHeight: '86%',
+  },
+  sheetScrollInner: {
+    paddingBottom: 34,
   },
   sheetHandle: {
     width: 36,

@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { ScriptureService } from '@/services/scripture-service';
 
 // Configure default notification handler so alerts show popup banner and play sound even when app is open
 Notifications.setNotificationHandler({
@@ -46,10 +47,21 @@ export class NotificationService {
 
     await this.cancelEarlyMorningReminder();
 
+    let bodyText =
+      '“Be strong in the Lord, and in the power of his might.” Ephesians 6:10';
+    try {
+      const todayPassage = await ScriptureService.getTodayPassage(0);
+      if (todayPassage?.scriptureText && todayPassage?.verseRef) {
+        bodyText = `“${todayPassage.scriptureText}” ${todayPassage.verseRef}`;
+      }
+    } catch {
+      // Fall back to Ephesians 6:10
+    }
+
     return Notifications.scheduleNotificationAsync({
       content: {
-        title: '🌅 Morning Watch',
-        body: 'Stand firm in the light, brother. Put on your armor and begin today’s Scripture reading.',
+        title: 'Your orders for today',
+        body: bodyText,
         sound: 'default',
         priority: Notifications.AndroidNotificationPriority.MAX,
         data: { type: 'early_morning' },

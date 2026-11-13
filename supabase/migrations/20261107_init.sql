@@ -201,6 +201,11 @@ CREATE POLICY "Anyone can read passages"
   TO authenticated, anon
   USING (true);
 
+CREATE POLICY "Anyone can insert daily votd passages"
+  ON public.passages FOR INSERT
+  TO authenticated, anon
+  WITH CHECK (id LIKE 'votd-%');
+
 CREATE POLICY "Anyone can read panic verses"
   ON public.panic_verses FOR SELECT
   TO authenticated, anon

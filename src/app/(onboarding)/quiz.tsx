@@ -149,7 +149,12 @@ export default function QuizScreen() {
               <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
             </View>
 
-            <Text style={styles.percentText}>{progressPercent}%</Text>
+            <TouchableOpacity
+              onPress={() => router.push('/(onboarding)/plan-reveal')}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.percentText}>{progressPercent}%</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Question Body */}

@@ -11,7 +11,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Defs, Pattern, Line, Mask, Rect } from 'react-native-svg';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -36,7 +36,7 @@ const S = SCREEN_WIDTH / 390;
 // Carousel geometry: neighbours sit one ITEM_W away so they peek in at the screen edges
 const ITEM_W = 200 * S;
 const SIDE_PAD = (SCREEN_WIDTH - ITEM_W) / 2;
-const CAROUSEL_H = 240 * S;
+const CAROUSEL_H = 260 * S;
 const MEDAL_W = 189 * S;
 const MEDAL_H = 220 * S;
 const RANK_IMAGE = require('../../../assets/images/rank-dummy.jpg');
@@ -52,12 +52,40 @@ const VIGIL_RANKS = [
   { id: 'overcomer', name: 'Overcomer', days: 365 },
 ];
 
+/**
+ * Generates an SVG path string for a shield centered at (cx, cy) with given width and height.
+ * Uses the exact parametric curve from Figma / 02_home.html.
+ */
+function makeShieldPath(cx: number, cy: number, w: number, h: number) {
+  const halfW = w / 2;
+  const halfH = h / 2;
+  const topY = cy - halfH;
+  const cornerY = topY + 0.12 * h;
+  const midY = cy;
+  const botY = cy + halfH;
+  const cp1Y = cy + 0.25 * h;
+  const cp2Y = cy + 0.42 * h;
+  const cp2X = 0.6 * halfW;
+
+  return [
+    `M ${cx.toFixed(1)} ${topY.toFixed(1)}`,
+    `L ${(cx + halfW).toFixed(1)} ${cornerY.toFixed(1)}`,
+    `L ${(cx + halfW).toFixed(1)} ${midY.toFixed(1)}`,
+    `C ${(cx + halfW).toFixed(1)} ${cp1Y.toFixed(1)} ${(cx + cp2X).toFixed(1)} ${cp2Y.toFixed(1)} ${cx.toFixed(1)} ${botY.toFixed(1)}`,
+    `C ${(cx - cp2X).toFixed(1)} ${cp2Y.toFixed(1)} ${(cx - halfW).toFixed(1)} ${cp1Y.toFixed(1)} ${(cx - halfW).toFixed(1)} ${midY.toFixed(1)}`,
+    `L ${(cx - halfW).toFixed(1)} ${cornerY.toFixed(1)}`,
+    'Z',
+  ].join(' ');
+}
+
 function CarouselItem({
+  rank,
   index,
   scrollX,
   isLocked,
   onPress,
 }: {
+  rank: (typeof VIGIL_RANKS)[number];
   index: number;
   scrollX: SharedValue<number>;
   isLocked: boolean;
@@ -66,7 +94,7 @@ function CarouselItem({
   const animatedStyle = useAnimatedStyle(() => {
     const range = [(index - 1) * ITEM_W, index * ITEM_W, (index + 1) * ITEM_W];
     return {
-      opacity: interpolate(scrollX.value, range, [0.5, 1, 0.5], Extrapolation.CLAMP),
+      opacity: interpolate(scrollX.value, range, [0.45, 1, 0.45], Extrapolation.CLAMP),
       transform: [
         { scale: interpolate(scrollX.value, range, [0.54, 1, 0.54], Extrapolation.CLAMP) },
       ],
@@ -76,6 +104,7 @@ function CarouselItem({
   return (
     <Animated.View style={[styles.carouselItem, animatedStyle]}>
       <ShieldMedallion
+        id={rank.id}
         width={MEDAL_W}
         height={MEDAL_H}
         imageSource={RANK_IMAGE}
@@ -184,13 +213,24 @@ export default function HomeScreen() {
   };
 
   // Adaptive vertical layout positioning
-  const topBarTop = Math.max(52, insets.top + 8);
+  const topBarTop = Math.max(54, insets.top + 8);
   const centerCy = topBarTop + 200 * S; // Vertical center of the medallion
-  const medallionTop = centerCy - 110 * S;
-  const titleTop = medallionTop + 230 * S;
-  const pathTop = titleTop + 66 * S;
-  const readBtnTop = pathTop + 66 * S;
-  const helpBtnBottom = Math.max(98, insets.bottom + 68);
+  const titleTop = centerCy + 134 * S;
+  const pathTop = titleTop + 72 * S;
+  const readBtnTop = pathTop + 72 * S;
+  const helpBtnBottom = Math.max(96, insets.bottom + 66);
+
+  // Background Concentric Shield Frame Geometry (centered at centerCy)
+  const frameSvgH = 340 * S;
+  const frameSvgW = SCREEN_WIDTH;
+  const frameSvgTop = centerCy - frameSvgH / 2;
+  const svgCx = frameSvgW / 2;
+  const svgCy = frameSvgH / 2;
+
+  // Exact concentric shield paths centered at (svgCx, svgCy)
+  const outerShieldPath = makeShieldPath(svgCx, svgCy, 230 * S, 270 * S);
+  const middleShieldPath = makeShieldPath(svgCx, svgCy, 216 * S, 254 * S);
+  const innerMaskShieldPath = makeShieldPath(svgCx, svgCy, 190 * S, 226 * S);
 
   return (
     <VigilBackground>
@@ -239,27 +279,64 @@ export default function HomeScreen() {
           style={[
             styles.hatchedWrapper,
             {
-              top: centerCy - 130 * S,
-              left: (SCREEN_WIDTH / 2) - 195 * S,
-              width: 390 * S,
-              height: 290 * S,
+              top: frameSvgTop,
+              left: 0,
+              width: frameSvgW,
+              height: frameSvgH,
             },
           ]}
         >
-          <Svg width={390 * S} height={290 * S} viewBox="0 0 390 290">
+          <Svg width={frameSvgW} height={frameSvgH} viewBox={`0 0 ${frameSvgW} ${frameSvgH}`}>
+            <Defs>
+              <Pattern
+                id="ringHatch"
+                width={3 * S}
+                height={3 * S}
+                patternUnits="userSpaceOnUse"
+                patternTransform="rotate(-30)"
+              >
+                <Line x1="0" y1="0" x2="0" y2={3 * S} stroke="#2C4290" strokeWidth={0.5} />
+              </Pattern>
+              <Mask id="ringMask">
+                <Path d={middleShieldPath} fill="#FFFFFF" />
+                <Path d={innerMaskShieldPath} fill="#000000" />
+              </Mask>
+            </Defs>
+
+            {/* Hatched textured band between middle frame and inner mask (Figma 02_home.html) */}
+            <Rect
+              x={svgCx - 115 * S}
+              y={svgCy - 135 * S}
+              width={230 * S}
+              height={270 * S}
+              fill="url(#ringHatch)"
+              mask="url(#ringMask)"
+              opacity={0.28}
+            />
+
+            {/* Translucent inner shield fill */}
             <Path
-              d="M195.0 8.0 L303.0 38.5 L303.0 135.0 C303.0 198.5 259.8 241.7 195.0 262.0 C130.2 241.7 87.0 198.5 87.0 135.0 L87.0 38.5 Z"
-              fill="rgba(255,255,255,0.35)"
-              stroke="#8798CC"
-              strokeOpacity={0.55}
+              d={middleShieldPath}
+              fill="rgba(244, 247, 253, 0.45)"
+            />
+
+            {/* Middle solid outline */}
+            <Path
+              d={middleShieldPath}
+              fill="none"
+              stroke="#5566A0"
+              strokeOpacity={0.5}
               strokeWidth={1}
             />
+
+            {/* Outer dashed outline */}
             <Path
-              d="M195.0 0.0 L310.0 32.4 L310.0 135.0 C310.0 202.5 264.0 248.4 195.0 270.0 C126.0 248.4 80.0 202.5 80.0 135.0 L80.0 32.4 Z"
+              d={outerShieldPath}
               fill="none"
-              stroke="#A3B3DE"
-              strokeOpacity={0.45}
+              stroke="#5566A0"
+              strokeOpacity={0.3}
               strokeWidth={0.8}
+              strokeDasharray="2 4"
             />
           </Svg>
         </View>
@@ -275,12 +352,13 @@ export default function HomeScreen() {
           onScroll={scrollHandler}
           onMomentumScrollEnd={handleMomentumEnd}
           contentOffset={{ x: currentRankIndex * ITEM_W, y: 0 }}
-          contentContainerStyle={{ paddingHorizontal: SIDE_PAD }}
+          contentContainerStyle={styles.carouselContent}
           style={[styles.carousel, { top: centerCy - CAROUSEL_H / 2, height: CAROUSEL_H }]}
         >
           {VIGIL_RANKS.map((rank, idx) => (
             <CarouselItem
               key={rank.id}
+              rank={rank}
               index={idx}
               scrollX={scrollX}
               isLocked={rank.days > cleanDays}
@@ -442,6 +520,10 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 3,
   },
+  carouselContent: {
+    paddingHorizontal: SIDE_PAD,
+    alignItems: 'center',
+  },
   carouselItem: {
     width: ITEM_W,
     height: CAROUSEL_H,
@@ -494,6 +576,7 @@ const styles = StyleSheet.create({
   hatchedWrapper: {
     position: 'absolute',
     pointerEvents: 'none',
+    zIndex: 2,
   },
   titleSection: {
     position: 'absolute',

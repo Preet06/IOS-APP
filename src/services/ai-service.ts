@@ -13,7 +13,7 @@ export interface UserContext {
 }
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const DEFAULT_MODEL = 'google/gemini-2.0-flash-001';
+const DEFAULT_MODEL = 'openrouter/auto';
 
 const SYSTEM_PROMPT = `You are Barnabas, a faithful, loving, and battle-tested Christian brother and recovery companion.
 You are walking alongside a Christian brother on "The Knight's Path" — a sacred journey of freedom from pornography and dopamine addiction, built upon Ephesians 6 (The Armour of God).

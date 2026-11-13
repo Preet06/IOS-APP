@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 import { User, Session } from '@supabase/supabase-js';
 import {
   getRankForDays,
@@ -12,6 +14,54 @@ import { supabase } from '@/lib/supabase';
 import { AuthService } from '@/services/auth-service';
 import { VigilBackupData } from '@/services/backup-service';
 import { NotificationService } from '@/services/notification-service';
+import {
+  SubscriptionService,
+  SubscriptionStatus,
+} from '@/services/subscription-service';
+
+export interface LapseEntry {
+  id: string;
+  timestamp: string;
+  dateFormatted: string;
+  heldDays: number;
+  triggers: string[];
+  note: string;
+}
+
+const LAPSES_STORAGE_KEY = 'vigil_lapses_v1';
+const LONGEST_HOLD_STORAGE_KEY = 'vigil_longest_hold_v1';
+const CHECK_IN_DATES_STORAGE_KEY = 'vigil_checkin_dates_v1';
+
+function toLocalDateString(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+async function saveStorageItem(key: string, value: string): Promise<void> {
+  try {
+    if (Platform.OS === 'web') {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+    } else {
+      await SecureStore.setItemAsync(key, value);
+    }
+  } catch (e) {
+    console.warn('Storage save error:', e);
+  }
+}
+
+async function getStorageItem(key: string): Promise<string | null> {
+  try {
+    if (Platform.OS === 'web') {
+      return typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
+    }
+    return await SecureStore.getItemAsync(key);
+  } catch (e) {
+    console.warn('Storage read error:', e);
+    return null;
+  }
+}
 
 export interface RecoveryState {
   user: User | null;
@@ -28,6 +78,7 @@ export interface RecoveryState {
   userName: string;
   reasons: string[];
   isSubscribed: boolean;
+  subscriptionStatus: SubscriptionStatus;
   activeRank: RankItem;
   highestEarnedRank: RankItem;
   unlockedRankIds: string[];
@@ -36,7 +87,13 @@ export interface RecoveryState {
   progressPercent: number;
   pendingMilestone: RankItem | null;
   currentStart: Date;
+  lapses: LapseEntry[];
+  longestHoldDays: number;
+  mostCommonTrigger: string;
   // Actions
+  purchaseSubscription: (plan: 'yearly' | 'monthly') => Promise<{ success: boolean; isSubscribed: boolean; error?: string }>;
+  restoreSubscription: () => Promise<{ success: boolean; isSubscribed: boolean; message: string }>;
+  setSubscriptionStatusState: (status: SubscriptionStatus) => Promise<void>;
   completeCheckIn: (passageId?: string) => Promise<void>;
   recordPanicVictory: () => Promise<void>;
   recordRelapse: (trigger?: string, note?: string) => Promise<void>;
@@ -124,8 +181,55 @@ export function RecoveryProvider({ children }: { children: React.ReactNode }) {
   const [userName, setUserName] = useState('Brother in Christ');
   const [reasons, setReasons] = useState<string[]>(DEFAULT_REASONS);
   const [isSubscribed, setIsSubscribed] = useState(true);
+  const [subscriptionStatus, setSubscriptionStatusStateInternal] = useState<SubscriptionStatus>('trial');
   const [unlockedRankIds, setUnlockedRankIds] = useState<string[]>(['initiate']);
   const [pendingMilestone, setPendingMilestone] = useState<RankItem | null>(null);
+  const [lapses, setLapses] = useState<LapseEntry[]>([]);
+  const [storedLongestHold, setStoredLongestHold] = useState<number>(0);
+  const [checkInDates, setCheckInDates] = useState<string[]>([]);
+
+  // Load persisted lapses, longest hold, subscription status, and check-in dates from local storage on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const savedSubStatus = await SubscriptionService.getLocalMockStatus();
+        setSubscriptionStatusStateInternal(savedSubStatus);
+        setIsSubscribed(savedSubStatus === 'active' || savedSubStatus === 'trial');
+      } catch {
+        // Fallback default
+      }
+
+      const savedLapsesJson = await getStorageItem(LAPSES_STORAGE_KEY);
+      if (savedLapsesJson) {
+        try {
+          const parsed = JSON.parse(savedLapsesJson);
+          if (Array.isArray(parsed)) setLapses(parsed);
+        } catch (e) {
+          console.warn('Failed to parse saved lapses:', e);
+        }
+      }
+      const savedHoldStr = await getStorageItem(LONGEST_HOLD_STORAGE_KEY);
+      if (savedHoldStr) {
+        const num = parseInt(savedHoldStr, 10);
+        if (!isNaN(num)) setStoredLongestHold(num);
+      }
+      const savedDatesJson = await getStorageItem(CHECK_IN_DATES_STORAGE_KEY);
+      if (savedDatesJson) {
+        try {
+          const parsedDates = JSON.parse(savedDatesJson);
+          if (Array.isArray(parsedDates)) {
+            const uniqueDates = Array.from(new Set(parsedDates.map(String)));
+            setCheckInDates(uniqueDates);
+            const todayLocal = toLocalDateString(new Date());
+            setIsCheckedInToday(uniqueDates.includes(todayLocal));
+            setScriptureStreak(calculateCheckInStreak(uniqueDates));
+          }
+        } catch (e) {
+          console.warn('Failed to parse saved check-in dates:', e);
+        }
+      }
+    })();
+  }, []);
 
   // Calculate clean time from currentStart timestamp (days, hours, minutes, seconds)
   const calculateCleanTime = (start: Date) => {
@@ -164,7 +268,10 @@ export function RecoveryProvider({ children }: { children: React.ReactNode }) {
 
       if (profile) {
         if (profile.name) setUserName(profile.name);
-        setIsSubscribed(profile.subscription_status === 'active' || profile.subscription_status === 'trial');
+        const status = (profile.subscription_status as SubscriptionStatus) || 'free';
+        setSubscriptionStatusStateInternal(status);
+        setIsSubscribed(status === 'active' || status === 'trial');
+        SubscriptionService.setLocalMockStatus(status);
       }
 
       // 2. Fetch Journey
@@ -197,24 +304,22 @@ export function RecoveryProvider({ children }: { children: React.ReactNode }) {
         setReasons(userReasons.map((r) => r.text));
       }
 
-      // 4. Fetch Check-ins & Compute Real Streak
+      // 4. Fetch Check-ins & Merge with Local Dates (strictly 1 check-in per calendar day)
       const { data: checkInRows } = await supabase
         .from('check_ins')
         .select('date')
         .eq('user_id', activeUser.id)
         .order('date', { ascending: false });
 
-      if (checkInRows && checkInRows.length > 0) {
-        const dates = checkInRows.map((c) => c.date);
-        const streak = calculateCheckInStreak(dates);
-        setScriptureStreak(streak);
-
-        const todayStr = new Date().toISOString().split('T')[0];
-        setIsCheckedInToday(dates.includes(todayStr));
-      } else {
-        setScriptureStreak(0);
-        setIsCheckedInToday(false);
-      }
+      const remoteDates = checkInRows ? checkInRows.map((c) => String(c.date)) : [];
+      setCheckInDates((prevLocalDates) => {
+        const mergedDates = Array.from(new Set([...prevLocalDates, ...remoteDates]));
+        saveStorageItem(CHECK_IN_DATES_STORAGE_KEY, JSON.stringify(mergedDates));
+        const todayLocal = toLocalDateString(new Date());
+        setIsCheckedInToday(mergedDates.includes(todayLocal));
+        setScriptureStreak(calculateCheckInStreak(mergedDates));
+        return mergedDates;
+      });
 
       // 5. Fetch Panic Sessions count
       const { count: urgesConquered } = await supabase
@@ -251,6 +356,45 @@ export function RecoveryProvider({ children }: { children: React.ReactNode }) {
       }
 
       setUnlockedRankIds(Array.from(unlockedSet));
+
+      // 7. Fetch Relapses & Merge with Local Storage
+      const { data: relapseRows } = await supabase
+        .from('relapses')
+        .select('*')
+        .eq('user_id', activeUser.id)
+        .order('timestamp', { ascending: false });
+
+      if (relapseRows && relapseRows.length > 0) {
+        const remoteEntries: LapseEntry[] = relapseRows.map((row: any, idx: number) => {
+          const dt = row.timestamp ? new Date(row.timestamp) : new Date();
+          const rawTrigger: string = row.trigger || 'Late night';
+          const parsedTriggers = rawTrigger
+            .split(',')
+            .map((t: string) => t.trim())
+            .filter(Boolean);
+          return {
+            id: row.id ? String(row.id) : `remote-${dt.getTime()}-${idx}`,
+            timestamp: dt.toISOString(),
+            dateFormatted: dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }),
+            heldDays: typeof row.held_days === 'number' ? row.held_days : 0,
+            triggers: parsedTriggers.length > 0 ? parsedTriggers : ['Late night'],
+            note: row.note || '',
+          };
+        });
+
+        setLapses((prevLocal) => {
+          const existingTimestamps = new Set(prevLocal.map((l) => l.timestamp));
+          const merged = [...prevLocal];
+          for (const rem of remoteEntries) {
+            if (!existingTimestamps.has(rem.timestamp)) {
+              merged.push(rem);
+            }
+          }
+          merged.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+          saveStorageItem(LAPSES_STORAGE_KEY, JSON.stringify(merged));
+          return merged;
+        });
+      }
     } catch (err) {
       console.warn('Error loading Supabase user data:', err);
     }
@@ -305,26 +449,58 @@ export function RecoveryProvider({ children }: { children: React.ReactNode }) {
   const nextRankInfo = getNextRank(cleanDays);
   const progressPercent = Math.min(100, Math.round((cleanDays / Math.max(1, goalDays)) * 100));
 
-  const completeCheckIn = async (passageId?: string) => {
-    if (!isCheckedInToday) {
-      setIsCheckedInToday(true);
-      setScriptureStreak((prev) => prev + 1);
+  const longestHoldDays = useMemo(() => {
+    const maxFromLapses = lapses.reduce((acc, l) => Math.max(acc, l.heldDays || 0), 0);
+    return Math.max(storedLongestHold, cleanDays, maxFromLapses);
+  }, [storedLongestHold, cleanDays, lapses]);
 
-      // Cancel evening reminder since user checked in today
-      NotificationService.cancelEveningCheckIn().catch(() => {});
-
-      if (user) {
-        const todayStr = new Date().toISOString().split('T')[0];
-        await supabase.from('check_ins').upsert(
-          {
-            user_id: user.id,
-            date: todayStr,
-            passage_id: passageId || null,
-            completed_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id,date' }
-        );
+  const mostCommonTrigger = useMemo(() => {
+    if (lapses.length === 0) return 'None yet';
+    const counts: Record<string, number> = {};
+    for (const l of lapses) {
+      for (const t of l.triggers) {
+        counts[t] = (counts[t] || 0) + 1;
       }
+    }
+    let topTrigger = 'Late night';
+    let topCount = 0;
+    for (const [trig, count] of Object.entries(counts)) {
+      if (count > topCount) {
+        topCount = count;
+        topTrigger = trig;
+      }
+    }
+    return topTrigger;
+  }, [lapses]);
+
+  const completeCheckIn = async (passageId?: string) => {
+    const todayLocal = toLocalDateString(new Date());
+
+    // Enforce strictly once per calendar day, no matter how many times daily reading is opened
+    if (isCheckedInToday || checkInDates.includes(todayLocal)) {
+      setIsCheckedInToday(true);
+      return;
+    }
+
+    const updatedDates = Array.from(new Set([...checkInDates, todayLocal]));
+    setCheckInDates(updatedDates);
+    setIsCheckedInToday(true);
+    setScriptureStreak(calculateCheckInStreak(updatedDates));
+    await saveStorageItem(CHECK_IN_DATES_STORAGE_KEY, JSON.stringify(updatedDates));
+
+    // Cancel evening reminder since user checked in today
+    NotificationService.cancelEveningCheckIn().catch(() => {});
+
+    if (user) {
+      await supabase.from('check_ins').upsert(
+        {
+          user_id: user.id,
+          date: todayLocal,
+          passage_id: passageId || null,
+          completed_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,date' }
+      );
     }
   };
 
@@ -343,6 +519,37 @@ export function RecoveryProvider({ children }: { children: React.ReactNode }) {
 
   const recordRelapse = async (trigger?: string, note?: string) => {
     const now = new Date();
+    const heldBeforeSlip = cleanDays;
+
+    // Update longest hold if current streak exceeded it
+    const updatedLongest = Math.max(storedLongestHold, heldBeforeSlip);
+    setStoredLongestHold(updatedLongest);
+    await saveStorageItem(LONGEST_HOLD_STORAGE_KEY, String(updatedLongest));
+
+    // Parse triggers (supports comma-separated multi-triggers)
+    const parsedTriggers = trigger
+      ? trigger
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : ['Late night'];
+
+    // Unique ID allows multiple lapses to be logged on the same day
+    const newLapse: LapseEntry = {
+      id: `${now.getTime()}-${Math.random().toString(36).slice(2, 7)}`,
+      timestamp: now.toISOString(),
+      dateFormatted: now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }),
+      heldDays: heldBeforeSlip,
+      triggers: parsedTriggers.length > 0 ? parsedTriggers : ['Late night'],
+      note: (note || '').trim(),
+    };
+
+    setLapses((prev) => {
+      const updated = [newLapse, ...prev];
+      saveStorageItem(LAPSES_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+
     setCurrentStart(now);
     calculateCleanTime(now);
 
@@ -510,6 +717,34 @@ export function RecoveryProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const purchaseSubscription = async (plan: 'yearly' | 'monthly') => {
+    const res = await SubscriptionService.purchasePlan(plan, user?.id);
+    if (res.success) {
+      const newStatus: SubscriptionStatus = plan === 'yearly' ? 'trial' : 'active';
+      setSubscriptionStatusStateInternal(newStatus);
+      setIsSubscribed(true);
+    }
+    return res;
+  };
+
+  const restoreSubscription = async () => {
+    const res = await SubscriptionService.restorePurchases(user?.id);
+    if (res.isSubscribed) {
+      setSubscriptionStatusStateInternal('active');
+      setIsSubscribed(true);
+    }
+    return res;
+  };
+
+  const setSubscriptionStatusState = async (status: SubscriptionStatus) => {
+    setSubscriptionStatusStateInternal(status);
+    setIsSubscribed(status === 'active' || status === 'trial');
+    await SubscriptionService.setLocalMockStatus(status);
+    if (user) {
+      await SubscriptionService.syncStatusToSupabase(user.id, status);
+    }
+  };
+
   const refreshUserData = async () => {
     if (user) {
       await loadUserDataFromSupabase(user);
@@ -534,6 +769,10 @@ export function RecoveryProvider({ children }: { children: React.ReactNode }) {
         userName,
         reasons,
         isSubscribed,
+        subscriptionStatus,
+        purchaseSubscription,
+        restoreSubscription,
+        setSubscriptionStatusState,
         activeRank,
         highestEarnedRank,
         unlockedRankIds,
@@ -541,6 +780,9 @@ export function RecoveryProvider({ children }: { children: React.ReactNode }) {
         nextRankInfo,
         progressPercent,
         pendingMilestone,
+        lapses,
+        longestHoldDays,
+        mostCommonTrigger,
         completeCheckIn,
         recordPanicVictory,
         recordRelapse,

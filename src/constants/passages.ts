@@ -3,7 +3,9 @@ export interface DevotionalPassage {
   dayNumber: number;
   verseRef: string;
   scriptureText: string;
+  reflectionHeadline?: string;
   reflectionText: string;
+  reflectionSubText?: string;
   prayerText: string;
   audioDuration?: string;
 }
